@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VASU Assistant</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --c: #00f5ff;
+  --r: 0; --g: 245; --b: 255;
+  --panel: rgba(3,8,16,0.93);
+  --border: rgba(0,245,255,0.2);
+  --glow: 0 0 14px rgba(0,245,255,0.6);
+  --fd: 'Orbitron', monospace;
+  --fm: 'Share Tech Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: #030810;
+  font-family: var(--fm);
+  color: var(--c);
+  cursor: crosshair;
+  user-select: none;
+}
+
+/* ── BG PARTICLES ── */
+#bg-canvas { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+/* ── AVATAR ── */
+#avatar-canvas {
+  position:fixed; left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  z-index:2; pointer-events:none;
+}
+
+/* ── SCANLINES ── */
+body::after {
+  content:''; position:fixed; inset:0; z-index:3; pointer-events:none;
+  background:repeating-linear-gradient(0deg, transparent 0,transparent 3px,rgba(0,0,0,0.04) 3px,rgba(0,0,0,0.04) 4px);
+}
+
+/* ── HUD ── */
+#hud {
+  position:fixed; inset:0; z-index:5;
+  display:grid;
+  grid-template-rows:50px 1fr 64px;
+  grid-template-columns:185px 1fr 185px;
+  pointer-events:none;
+}
+
+/* ── TOPBAR ── */
+#topbar {
+  grid-column:1/-1;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 18px;
+  background:linear-gradient(180deg,rgba(3,8,16,.98) 0%,transparent 100%);
+  border-bottom:1px solid var(--border);
+  pointer-events:all;
+}
+.logo {
+  font-family:var(--fd); font-size:15px; font-weight:900;
+  letter-spacing:.42em; text-shadow:var(--glow);
+  animation:pulse 3s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.topbar-mid { display:flex; gap:18px; font-size:10px; color:rgba(0,245,255,.42); letter-spacing:.1em; align-items:center; }
+.dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--c); box-shadow:var(--glow); margin-right:5px; animation:blink 1.4s step-start infinite; }
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.05}}
+.mode-lbl { font-family:var(--fd); font-size:9px; letter-spacing:.18em; opacity:.52; transition:color .4s; }
+
+/* ── SIDE PANELS ── */
+.side {
+  grid-row:2;
+  display:flex; flex-direction:column; gap:9px;
+  padding:12px 9px;
+  pointer-events:all;
+}
+#lp{grid-column:1;} #rp{grid-column:3;}
+
+.card {
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-left:2px solid var(--c);
+  padding:9px 11px;
+  backdrop-filter:blur(10px);
+  position:relative; overflow:hidden;
+  transition:border-color .4s, border-left-color .4s;
+}
+.card::after {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,var(--c),transparent); opacity:.22;
+  transition:background .4s;
+}
+.ct {
+  font-family:var(--fd); font-size:7px; letter-spacing:.24em;
+  opacity:.4; margin-bottom:7px;
+}
+
+/* bars */
+.br{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.bl{width:24px;font-size:8px;opacity:.4;}
+.bt{flex:1;height:3px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;}
+.bf{height:100%;border-radius:2px;background:var(--c);box-shadow:0 0 6px var(--c);transition:width .7s cubic-bezier(.4,0,.2,1),background .4s,box-shadow .4s;}
+.bv{font-size:8px;opacity:.4;min-width:22px;text-align:right;}
+
+/* waveform */
+#wave{width:100%;height:36px;display:block;margin-top:2px;}
+
+/* emotion card */
+.eface{text-align:center;font-size:36px;padding:4px 0;
+  filter:drop-shadow(0 0 10px var(--c));
+  animation:bob 3s ease-in-out infinite;transition:filter .4s;}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.ename{font-family:var(--fd);font-size:8px;letter-spacing:.22em;text-align:center;margin-top:5px;transition:color .4s;}
+.esub{font-size:9px;text-align:center;margin-top:4px;color:rgba(255,255,255,.28);line-height:1.5;}
+
+/* log */
+#log{font-size:9px;line-height:1.85;color:rgba(255,255,255,.32);overflow:hidden;max-height:96px;}
+.ll{padding-left:2px;}
+.ll::before{content:'› ';color:var(--c);opacity:.5;}
+
+/* ctx */
+.crow{display:flex;justify-content:space-between;margin-bottom:5px;font-size:9px;opacity:.45;}
+
+/* response text card */
+#resp-card { min-height: 48px; }
+#resp-text {
+  font-size: 10px; line-height: 1.7;
+  color: rgba(255,255,255,.75);
+  max-height: 80px; overflow: hidden;
+  border-left: 2px solid var(--c);
+  padding-left: 8px;
+  transition: border-color .4s;
+}
+.resp-cur {
+  display:inline-block; width:2px; height:10px;
+  background:var(--c); vertical-align:middle; margin-left:2px;
+  animation:blink .7s step-start infinite; transition:background .4s;
+}
+
+/* ── SPEECH BUBBLE ── */
+#bubble {
+  position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+  z-index:10; max-width:500px; min-width:180px;
+  background:rgba(3,8,16,.95);
+  border:1px solid var(--c);
+  padding:13px 17px; font-size:12.5px; line-height:1.65;
+  color:rgba(255,255,255,.88); backdrop-filter:blur(14px);
+  box-shadow:var(--glow);
+  opacity:0; pointer-events:none;
+  transition:opacity .3s, border-color .4s, box-shadow .4s;
+}
+#bubble.show{opacity:1;}
+#bubble::after{
+  content:''; position:absolute; bottom:-7px; left:50%;
+  transform:translateX(-50%) rotate(45deg);
+  width:11px; height:11px; background:var(--c);
+  opacity:.6; clip-path:polygon(0 100%,0 0,100% 100%);
+  transition:background .4s;
+}
+.bcur{display:inline-block;width:2px;height:12px;background:var(--c);vertical-align:middle;margin-left:2px;animation:blink .7s step-start infinite;transition:background .4s;}
+
+/* ── LISTEN RING (shown when mic is active) ── */
+#listen-ring {
+  position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+  z-index:9; width:180px; height:180px;
+  border-radius:50%;
+  border:2px solid var(--c);
+  box-shadow:var(--glow);
+  opacity:0; pointer-events:none;
+  transition:opacity .3s;
+  animation:listen-pulse 1.2s ease-in-out infinite;
+}
+#listen-ring.show{opacity:.35;}
+@keyframes listen-pulse{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.08)}}
+
+/* ── WAKE INDICATOR ── */
+#wake-badge {
+  position:fixed; top:58px; left:50%; transform:translateX(-50%);
+  z-index:10; font-family:var(--fd); font-size:9px; letter-spacing:.2em;
+  padding:4px 14px;
+  background:rgba(3,8,16,.9); border:1px solid var(--c);
+  color:var(--c); box-shadow:var(--glow);
+  opacity:0; pointer-events:none;
+  transition:opacity .3s;
+}
+#wake-badge.show{opacity:1;}
+
+/* ── BOTTOM BAR ── */
+#botbar {
+  grid-column:1/-1;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:0 18px;
+  background:linear-gradient(0deg,rgba(3,8,16,.98) 0%,transparent 100%);
+  border-top:1px solid var(--border);
+  pointer-events:all;
+}
+.ebtn{width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.12);background:transparent;font-size:14px;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;}
+.ebtn:hover{transform:scale(1.25);border-color:rgba(255,255,255,.4);}
+.ebtn.on{border-color:var(--c);box-shadow:0 0 10px var(--c);}
+.sep{width:1px;height:26px;background:var(--border);margin:0 3px;}
+.btn{font-family:var(--fd);font-size:8px;letter-spacing:.13em;padding:6px 13px;background:transparent;border:1px solid var(--c);color:var(--c);cursor:pointer;transition:all .18s;position:relative;overflow:hidden;}
+.btn::before{content:'';position:absolute;inset:0;background:var(--c);opacity:0;transition:opacity .18s;}
+.btn:hover::before{opacity:.07;}
+.btn:active::before{opacity:.18;}
+.btn.on{background:rgba(0,245,255,.1);box-shadow:var(--glow);}
+.btn:disabled{opacity:.3;cursor:default;}
+
+/* ticker */
+#ticker{font-size:9px;color:rgba(0,245,255,.28);letter-spacing:.06em;overflow:hidden;max-width:220px;white-space:nowrap;}
+#ticker span{display:inline-block;animation:tick 22s linear infinite;}
+@keyframes tick{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+
+/* corners */
+.corner{position:fixed;width:34px;height:34px;pointer-events:none;z-index:6;opacity:.32;}
+.corner svg{width:100%;height:100%;}
+.tl{top:54px;left:5px;} .tr{top:54px;right:5px;transform:scaleX(-1);}
+.bl{bottom:68px;left:5px;transform:scaleY(-1);} .br{bottom:68px;right:5px;transform:scale(-1,-1);}
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<canvas id="avatar-canvas" width="340" height="400"></canvas>
+
+<!-- Listen ring (mic active indicator) -->
+<div id="listen-ring"></div>
+
+<!-- Wake word badge -->
+<div id="wake-badge">⬡ VASU ACTIVE</div>
+
+<!-- Speech bubble -->
+<div id="bubble"><span id="btxt"></span><span class="bcur" id="bcur" style="display:none"></span></div>
+
+<!-- Corner brackets -->
+<div class="corner tl"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+<div class="corner tr"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+<div class="corner bl"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+<div class="corner br"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+
+<!-- HUD -->
+<div id="hud">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="logo">VASU</div>
+    <div class="topbar-mid">
+      <span><span class="dot"></span><span id="stat">ONLINE</span></span>
+      <span id="clk">00:00:00</span>
+      <span id="ds"></span>
+    </div>
+    <div class="mode-lbl" id="mlbl">IDLE MODE</div>
+  </div>
+
+  <!-- LEFT PANEL -->
+  <div class="side" id="lp">
+    <div class="card">
+      <div class="ct">SYSTEM METRICS</div>
+      <div class="br"><span class="bl">CPU</span><div class="bt"><div class="bf" id="b-cpu" style="width:42%"></div></div><span class="bv" id="v-cpu">42%</span></div>
+      <div class="br"><span class="bl">RAM</span><div class="bt"><div class="bf" id="b-ram" style="width:67%"></div></div><span class="bv" id="v-ram">67%</span></div>
+      <div class="br"><span class="bl">NET</span><div class="bt"><div class="bf" id="b-net" style="width:28%"></div></div><span class="bv" id="v-net">28%</span></div>
+    </div>
+
+    <div class="card">
+      <div class="ct">VOICE SIGNAL</div>
+      <canvas id="wave"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="ct">AFFECT STATE</div>
+      <div class="eface" id="eface">😐</div>
+      <div class="ename" id="ename">NEUTRAL</div>
+      <div class="esub" id="esub">Standard mode.<br>Awaiting input.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="side" id="rp">
+    <div class="card">
+      <div class="ct">RESPONSE METRICS</div>
+      <div class="br"><span class="bl">CONF</span><div class="bt"><div class="bf" id="b-conf" style="width:88%"></div></div><span class="bv" id="v-conf">88%</span></div>
+      <div class="br"><span class="bl">TONE</span><div class="bt"><div class="bf" id="b-tone" style="width:72%"></div></div><span class="bv" id="v-tone">72%</span></div>
+      <div class="br"><span class="bl">SYNC</span><div class="bt"><div class="bf" id="b-sync" style="width:95%"></div></div><span class="bv" id="v-sync">95%</span></div>
+    </div>
+
+    <!-- Last response text display -->
+    <div class="card" id="resp-card">
+      <div class="ct">LAST RESPONSE</div>
+      <div id="resp-text"><span style="opacity:.3">Awaiting response...</span></div>
+    </div>
+
+    <div class="card" style="flex:1;overflow:hidden;">
+      <div class="ct">SESSION LOG</div>
+      <div id="log">
+        <div class="ll">System initialized</div>
+        <div class="ll">Canvas renderer ready</div>
+        <div class="ll">Say "Vasu" to activate</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ct">CONTEXT WINDOW</div>
+      <div class="crow"><span>TOKENS</span><span id="ctxv">0 / 128k</span></div>
+      <div class="bt" style="height:5px;"><div class="bf" id="b-ctx" style="width:1%"></div></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="botbar">
+    <!-- Emotion override buttons -->
+    <button class="ebtn on" data-e="neutral" title="Neutral">😐</button>
+    <button class="ebtn" data-e="happy"   title="Happy">😊</button>
+    <button class="ebtn" data-e="excited" title="Excited">🤩</button>
+    <button class="ebtn" data-e="sad"     title="Sad">😢</button>
+    <button class="ebtn" data-e="angry"   title="Angry">😠</button>
+
+    <div class="sep"></div>
+
+    <!-- Status indicators (read-only, reflect backend state) -->
+    <button class="btn" id="btn-status" disabled>⬡ IDLE</button>
+
+    <div class="sep"></div>
+
+    <!-- Demo button (for testing without backend) -->
+    <button class="btn" id="btn-demo" onclick="demoSpeak()">◈ DEMO</button>
+
+    <div class="sep"></div>
+
+    <div id="ticker"><span>VASU NEURAL CORE v4 · AFFECT ENGINE ONLINE · VOICE BRIDGE ACTIVE · ALL SYSTEMS NOMINAL ·&nbsp;&nbsp;&nbsp;</span></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  VASU UI — pywebview bridge + Canvas2D avatar
+//  All JS functions called from Python are defined here.
+// ═══════════════════════════════════════════════════════
+
+// ── EMOTION CONFIG ──────────────────────────────────────
+const EMO = {
+  neutral: { icon:'😐', name:'NEUTRAL', desc:'Standard mode.\nAwaiting input.',
+    hex:'#00f5ff', r:0,   g:245, b:255, mspd:100, mamp:.50, eyeH:.55, browY: 0,  mouthCurve: 0  },
+  happy:   { icon:'😊', name:'HAPPY',   desc:'Positive affect.\nHigh engagement.',
+    hex:'#00ff99', r:0,   g:255, b:153, mspd:75,  mamp:.75, eyeH:.38, browY:.5,  mouthCurve: 1  },
+  excited: { icon:'🤩', name:'EXCITED', desc:'Peak enthusiasm.\nFull power.',
+    hex:'#ffb300', r:255, g:179, b:0,   mspd:50,  mamp:.95, eyeH:.60, browY:.8,  mouthCurve: .7 },
+  sad:     { icon:'😢', name:'SAD',     desc:'Low energy state.\nEmpathy active.',
+    hex:'#5e9fff', r:94,  g:159, b:255, mspd:160, mamp:.22, eyeH:.45, browY:-.6, mouthCurve:-1  },
+  angry:   { icon:'😠', name:'ANGRY',   desc:'Alert state.\nStress response.',
+    hex:'#ff3b5c', r:255, g:59,  b:92,  mspd:45,  mamp:1.0, eyeH:.58, browY:-.9, mouthCurve:-.5 },
+};
+
+let emotion    = 'neutral';
+let isTalking  = false;
+let isListening= false;
+let isAwake    = false;
+let mouseX = window.innerWidth/2, mouseY = window.innerHeight/2;
+let twTimer = null;
+
+// ── APPLY EMOTION ───────────────────────────────────────
+function applyEmotion(name) {
+  const e = EMO[name] || EMO.neutral;
+  emotion = name;
+  const s = document.documentElement.style;
+  s.setProperty('--c',      e.hex);
+  s.setProperty('--r',      e.r);
+  s.setProperty('--g',      e.g);
+  s.setProperty('--b',      e.b);
+  s.setProperty('--border', `rgba(${e.r},${e.g},${e.b},0.22)`);
+  s.setProperty('--glow',   `0 0 14px rgba(${e.r},${e.g},${e.b},0.6)`);
+  document.getElementById('eface').textContent = e.icon;
+  document.getElementById('ename').textContent = e.name;
+  document.getElementById('esub').textContent  = e.desc;
+  document.querySelectorAll('.ebtn').forEach(b => b.classList.toggle('on', b.dataset.e === name));
+}
+
+// ═══════════════════════════════════════════════════════
+//  PUBLIC API — called directly from Python via
+//  webview.windows[0].evaluate_js("functionName(args)")
+// ═══════════════════════════════════════════════════════
+
+/**
+ * assistantSpeaking(true/false)
+ * ─ Your existing main.py already calls this exact function name.
+ * ─ Starts/stops lip sync + waveform + mode label.
+ */
+window.assistantSpeaking = function(state) {
+  isTalking = !!state;
+  const btn = document.getElementById('btn-status');
+  if (state) {
+    btn.textContent = '🔊 SPEAKING';
+    setMode('SPEAKING');
+    addLog('Vasu is speaking...');
+  } else {
+    btn.textContent = '⬡ IDLE';
+    setMode('IDLE');
+    hideBubble();
+  }
+};
+
+/**
+ * showResponse(text, emotion)
+ * ─ Call from Python after getting LLM answer, before speaking.
+ * ─ Shows typewriter text in bubble + right-panel response card.
+ * ─ emotion: 'neutral'|'happy'|'sad'|'angry'|'excited' (optional)
+ */
+window.showResponse = function(text, emo) {
+  if (emo) applyEmotion(emo);
+  showBubble(text, true);
+  // Update response card
+  const el = document.getElementById('resp-text');
+  el.innerHTML = '';
+  let i = 0;
+  const go = () => {
+    if (i < text.length) { el.textContent += text[i++]; setTimeout(go, 18); }
+  };
+  go();
+  addLog('Response: ' + text.slice(0, 42) + (text.length > 42 ? '…' : ''));
+};
+
+/**
+ * setListening(true/false)
+ * ─ Call when microphone starts/stops listening.
+ * ─ Shows the pulsing listen ring around avatar.
+ */
+window.setListening = function(state) {
+  isListening = !!state;
+  document.getElementById('listen-ring').classList.toggle('show', isListening);
+  if (state) {
+    setMode('LISTENING');
+    document.getElementById('btn-status').textContent = '🎙 LISTENING';
+    addLog('Mic active...');
+  }
+};
+
+/**
+ * setWakeState(true/false)
+ * ─ Call when wake word "vasu" is detected or sleep triggered.
+ */
+window.setWakeState = function(state) {
+  isAwake = !!state;
+  document.getElementById('wake-badge').classList.toggle('show', isAwake);
+  if (state) {
+    applyEmotion('neutral');
+    addLog('Wake word detected');
+    setMode('ACTIVE');
+  } else {
+    addLog('Going to sleep...');
+    setMode('SLEEP');
+    applyEmotion('neutral');
+    hideBubble();
+  }
+};
+
+/**
+ * setEmotion(name)
+ * ─ Directly set emotion from Python when AI detects sentiment.
+ */
+window.setEmotion = function(name) {
+  if (EMO[name]) applyEmotion(name);
+};
+
+/**
+ * addLogEntry(text)
+ * ─ Push a log line from Python to the session log.
+ */
+window.addLogEntry = function(text) {
+  addLog(text);
+};
+
+/**
+ * updateTokens(used, total)
+ * ─ Update context window bar from Python.
+ */
+window.updateTokens = function(used, total) {
+  const pct = Math.min(100, (used/total)*100);
+  document.getElementById('b-ctx').style.width = pct.toFixed(1) + '%';
+  document.getElementById('ctxv').textContent = used + ' / ' + total + 'k';
+};
+
+// ═══════════════════════════════════════════════════════
+//  INTERNAL HELPERS
+// ═══════════════════════════════════════════════════════
+
+function setMode(t) {
+  document.getElementById('mlbl').textContent = t + ' MODE';
+  document.getElementById('stat').textContent =
+    t === 'IDLE' || t === 'SLEEP' ? 'ONLINE' : t;
+}
+
+function addLog(msg) {
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = 'll'; d.textContent = msg;
+  log.appendChild(d);
+  while (log.children.length > 8) log.removeChild(log.firstChild);
+}
+
+// ── BUBBLE ──────────────────────────────────────────────
+function showBubble(text, tw) {
+  const bub = document.getElementById('bubble');
+  const el  = document.getElementById('btxt');
+  const cur = document.getElementById('bcur');
+  clearTimeout(twTimer);
+  el.textContent = ''; bub.classList.add('show');
+  if (tw) {
+    cur.style.display = 'inline-block'; let i = 0;
+    const go = () => { if(i<text.length){el.textContent+=text[i++]; twTimer=setTimeout(go,26);} else cur.style.display='none'; };
+    go();
+  } else { el.textContent = text; cur.style.display = 'none'; }
+}
+function hideBubble() {
+  document.getElementById('bubble').classList.remove('show');
+  clearTimeout(twTimer);
+}
+
+// ── AVATAR CANVAS ────────────────────────────────────────
+const AC  = document.getElementById('avatar-canvas');
+const ax  = AC.getContext('2d');
+
+const av = { mouthOpen:0, eyeH:.55, browY:0, mouthCurve:0,
+             lookX:0, lookY:0, breathe:0, blinkTimer:0 };
+let lastBlinkTs = 0;
+
+function drawAvatar(ts) {
+  const W=AC.width, H=AC.height, cx=W/2, cy=H/2;
+  const e = EMO[emotion] || EMO.neutral;
+  const lerp = (a,b,t) => a+(b-a)*t;
+
+  av.eyeH       = lerp(av.eyeH,       e.eyeH,       0.07);
+  av.browY      = lerp(av.browY,       e.browY,       0.07);
+  av.mouthCurve = lerp(av.mouthCurve,  e.mouthCurve,  0.07);
+
+  const tgtMouth = isTalking ? ((Math.sin(ts/e.mspd)+1)/2 * e.mamp) : 0;
+  av.mouthOpen  = lerp(av.mouthOpen, tgtMouth, 0.16);
+
+  const rect = AC.getBoundingClientRect();
+  av.lookX = lerp(av.lookX, ((mouseX-(rect.left+W/2))/window.innerWidth)*10,  0.06);
+  av.lookY = lerp(av.lookY, ((mouseY-(rect.top +H/2))/window.innerHeight)*8, 0.06);
+  av.breathe = Math.sin(ts/2000)*4;
+
+  av.blinkTimer += 16;
+  if (av.blinkTimer > 4000+Math.random()*2000) { av.blinkTimer=0; lastBlinkTs=ts; }
+  const blinkAmt = (ts-lastBlinkTs < 120) ? Math.sin((ts-lastBlinkTs)/120*Math.PI) : 0;
+
+  ax.clearRect(0,0,W,H);
+
+  const col   = (a) => `rgba(${e.r},${e.g},${e.b},${a})`;
+
+  // outer glow
+  const rg = ax.createRadialGradient(cx,cy+30,80,cx,cy+30,155);
+  rg.addColorStop(0,col(.10)); rg.addColorStop(1,col(0));
+  ax.beginPath(); ax.arc(cx,cy+30,155,0,Math.PI*2);
+  ax.fillStyle=rg; ax.fill();
+
+  ax.save();
+  ax.translate(cx, cy + av.breathe);
+
+  // neck
+  ax.beginPath(); ax.rect(-18,98,36,36);
+  ax.fillStyle='#1a1a2e'; ax.fill();
+
+  // head
+  ax.shadowColor=col(1); ax.shadowBlur=20;
+  ax.beginPath(); ax.ellipse(0,10,88,105,0,0,Math.PI*2);
+  ax.fillStyle='#0d0d1f'; ax.fill();
+  ax.shadowBlur=0;
+
+  ax.beginPath(); ax.ellipse(0,10,88,105,0,0,Math.PI*2);
+  ax.strokeStyle=col(.5); ax.lineWidth=1.5; ax.stroke();
+
+  // face shimmer
+  const fg=ax.createRadialGradient(-20,-30,10,0,0,90);
+  fg.addColorStop(0,col(.07)); fg.addColorStop(1,'transparent');
+  ax.beginPath(); ax.ellipse(0,10,88,105,0,0,Math.PI*2);
+  ax.fillStyle=fg; ax.fill();
+
+  // hair visor
+  ax.beginPath(); ax.ellipse(0,-72,88,42,0,Math.PI,Math.PI*2);
+  ax.fillStyle=col(.16); ax.fill();
+  ax.strokeStyle=col(.28); ax.lineWidth=1; ax.stroke();
+
+  // circuit lines
+  ax.strokeStyle=col(.07); ax.lineWidth=1;
+  [[-60,-20],[-60,20],[60,-20],[60,20]].forEach(([sx,sy])=>{
+    ax.beginPath(); ax.moveTo(sx,sy); ax.lineTo(sx/2,sy/3); ax.stroke();
+  });
+
+  // ── EYES ──
+  [[-28,0],[28,0]].forEach(([ex],i)=>{
+    const ey=-5, px=ex+av.lookX*.6, py=ey+av.lookY*.4;
+    // socket
+    ax.beginPath(); ax.ellipse(ex,ey,22,14,0,0,Math.PI*2);
+    ax.fillStyle='#07071a'; ax.fill();
+    ax.strokeStyle=col(.35); ax.lineWidth=1; ax.stroke();
+    // iris
+    ax.beginPath(); ax.ellipse(px,py,10,10,0,0,Math.PI*2);
+    ax.fillStyle=col(.7); ax.fill();
+    // pupil
+    ax.beginPath(); ax.ellipse(px,py,5,5,0,0,Math.PI*2);
+    ax.fillStyle='#000'; ax.fill();
+    // shine
+    ax.beginPath(); ax.ellipse(px-2,py-2,2,2,0,0,Math.PI*2);
+    ax.fillStyle='rgba(255,255,255,.6)'; ax.fill();
+    // eyelid
+    const lid=Math.max(blinkAmt,1-av.eyeH);
+    if(lid>0){ ax.beginPath(); ax.ellipse(ex,ey,22,14*lid,0,0,Math.PI*2); ax.fillStyle='#0d0d1f'; ax.fill(); }
+    // eyebrow
+    const by2=ey-20-av.browY*6;
+    ax.beginPath();
+    ax.moveTo(ex-14, by2+(i===0? av.browY*4:-av.browY*4));
+    ax.quadraticCurveTo(ex,by2-3,ex+14,by2+(i===0?-av.browY*4:av.browY*4));
+    ax.strokeStyle=col(.72); ax.lineWidth=2.5; ax.lineCap='round'; ax.stroke();
+  });
+
+  // nose
+  ax.beginPath(); ax.moveTo(-5,18); ax.lineTo(0,28); ax.lineTo(5,18);
+  ax.strokeStyle=col(.22); ax.lineWidth=1.5; ax.stroke();
+
+  // ── MOUTH ──
+  const mw=30, my2=48, openH=av.mouthOpen*16, curve=av.mouthCurve*10;
+  if (openH>0.5) {
+    ax.beginPath();
+    ax.moveTo(-mw,my2-openH/2);
+    ax.quadraticCurveTo(0,my2-openH/2+curve,mw,my2-openH/2);
+    ax.quadraticCurveTo(mw+3,my2,mw,my2+openH/2);
+    ax.quadraticCurveTo(0,my2+openH/2+curve*.5,-mw,my2+openH/2);
+    ax.quadraticCurveTo(-mw-3,my2,-mw,my2-openH/2);
+    ax.fillStyle='#03040c'; ax.fill();
+    ax.strokeStyle=col(.5); ax.lineWidth=1.5; ax.stroke();
+    ax.beginPath(); ax.rect(-mw+4,my2-openH/2+2,(mw-4)*2,openH*.3);
+    ax.fillStyle='rgba(255,255,255,.14)'; ax.fill();
+  } else {
+    ax.beginPath(); ax.moveTo(-mw,my2);
+    ax.quadraticCurveTo(0,my2+curve,mw,my2);
+    ax.strokeStyle=col(.55); ax.lineWidth=2; ax.lineCap='round'; ax.stroke();
+  }
+
+  // ears
+  [-90,90].forEach(ex2=>{
+    ax.beginPath(); ax.arc(ex2,10,8,0,Math.PI*2);
+    ax.fillStyle='#0d0d1f'; ax.fill();
+    ax.strokeStyle=col(.28); ax.lineWidth=1; ax.stroke();
+    ax.beginPath(); ax.arc(ex2,10,4,0,Math.PI*2);
+    ax.strokeStyle=col(.45); ax.stroke();
+  });
+
+  // corner hud marks
+  ax.strokeStyle=col(.14); ax.lineWidth=1;
+  ax.beginPath(); ax.moveTo(-50,-85); ax.lineTo(-50,-75); ax.lineTo(-40,-70); ax.stroke();
+  ax.beginPath(); ax.moveTo(50,-85);  ax.lineTo(50,-75);  ax.lineTo(40,-70);  ax.stroke();
+
+  ax.restore();
+
+  // ── SHOULDERS ──
+  ax.save(); ax.translate(cx, cy+av.breathe);
+  ax.beginPath();
+  ax.moveTo(-100,140); ax.quadraticCurveTo(-110,115,-90,105);
+  ax.lineTo(90,105); ax.quadraticCurveTo(110,115,100,140);
+  ax.fillStyle='#0a0a1e'; ax.fill();
+  ax.strokeStyle=col(.3); ax.lineWidth=1.5; ax.stroke();
+  ax.beginPath(); ax.moveTo(-30,110); ax.lineTo(0,118); ax.lineTo(30,110);
+  ax.strokeStyle=col(.38); ax.lineWidth=1; ax.stroke();
+  const cg2=ax.createRadialGradient(0,122,0,0,122,14);
+  cg2.addColorStop(0,col(.55)); cg2.addColorStop(1,col(0));
+  ax.beginPath(); ax.arc(0,122,14,0,Math.PI*2); ax.fillStyle=cg2; ax.fill();
+  ax.restore();
+
+  requestAnimationFrame(drawAvatar);
+}
+requestAnimationFrame(drawAvatar);
+
+// ── PARTICLE BG ─────────────────────────────────────────
+const BC = document.getElementById('bg-canvas');
+const bx = BC.getContext('2d');
+BC.width  = window.innerWidth;
+BC.height = window.innerHeight;
+const pts = Array.from({length:50},()=>({
+  x:Math.random()*BC.width, y:Math.random()*BC.height,
+  r:Math.random()*1.1+.3, vx:(Math.random()-.5)*.3, vy:(Math.random()-.5)*.3, a:Math.random()
+}));
+function drawBG() {
+  bx.clearRect(0,0,BC.width,BC.height);
+  const e=EMO[emotion]||EMO.neutral;
+  pts.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0)p.x=BC.width; if(p.x>BC.width)p.x=0;
+    if(p.y<0)p.y=BC.height; if(p.y>BC.height)p.y=0;
+    bx.beginPath(); bx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    bx.fillStyle=`rgba(${e.r},${e.g},${e.b},${p.a*.3})`; bx.fill();
+  });
+  requestAnimationFrame(drawBG);
+}
+drawBG();
+window.addEventListener('resize',()=>{BC.width=window.innerWidth;BC.height=window.innerHeight;});
+
+// ── WAVEFORM ─────────────────────────────────────────────
+const WC=document.getElementById('wave');
+const wx=WC.getContext('2d');
+function drawWave(ts) {
+  const W=WC.offsetWidth||160, H=36;
+  WC.width=W*devicePixelRatio; WC.height=H*devicePixelRatio;
+  wx.scale(devicePixelRatio,devicePixelRatio);
+  wx.clearRect(0,0,W,H);
+  const e=EMO[emotion]||EMO.neutral;
+  wx.strokeStyle=`rgb(${e.r},${e.g},${e.b})`;
+  wx.lineWidth=1.5; wx.shadowColor=`rgb(${e.r},${e.g},${e.b})`; wx.shadowBlur=5;
+  wx.beginPath();
+  const amp=isTalking?11:isListening?5:2;
+  for(let i=0;i<=56;i++){
+    const x=(i/56)*W;
+    const noise=isTalking
+      ? Math.sin(i*.4+ts/100)*amp+Math.sin(i*.85+ts/65)*amp*.5*(Math.random()+.5)
+      : isListening
+        ? Math.sin(i*.4+ts/200)*amp+Math.random()*amp*.3
+        : Math.sin(i*.3+ts/1200)*amp;
+    i===0?wx.moveTo(x,H/2+noise):wx.lineTo(x,H/2+noise);
+  }
+  wx.stroke();
+  requestAnimationFrame(drawWave);
+}
+requestAnimationFrame(drawWave);
+
+// ── CLOCK ────────────────────────────────────────────────
+function tick(){
+  const n=new Date(),p=v=>String(v).padStart(2,'0');
+  document.getElementById('clk').textContent=`${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}`;
+  document.getElementById('ds').textContent=n.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+setInterval(tick,1000); tick();
+
+// ── METRICS SIM ──────────────────────────────────────────
+function jitter(b,r){return Math.min(99,Math.max(1,b+(Math.random()-.5)*r));}
+function setBar(id,v){
+  document.getElementById('b-'+id).style.width=v.toFixed(0)+'%';
+  const el=document.getElementById('v-'+id);
+  if(el)el.textContent=v.toFixed(0)+'%';
+}
+setInterval(()=>{
+  setBar('cpu',jitter(isTalking?66:42,12));
+  setBar('ram',jitter(67,8));
+  setBar('net',jitter(isTalking?50:28,14));
+  setBar('conf',jitter(88,5));
+  setBar('tone',jitter(72,10));
+  setBar('sync',jitter(95,3));
+  const p=(Date.now()/1000%120)/120*100;
+  document.getElementById('b-ctx').style.width=p.toFixed(1)+'%';
+  document.getElementById('ctxv').textContent=Math.round(p*1280)+' / 128k';
+},1200);
+
+// ── MOUSE ────────────────────────────────────────────────
+document.addEventListener('mousemove',ev=>{mouseX=ev.clientX;mouseY=ev.clientY;});
+
+// ── EMOTION BUTTONS ──────────────────────────────────────
+document.querySelectorAll('.ebtn').forEach(b=>{
+  b.addEventListener('click',()=>applyEmotion(b.dataset.e));
+});
+
+// ── DEMO (standalone, no backend needed) ─────────────────
+async function demoSpeak(){
+  const demos=[
+    {text:"All systems online. Ready for your command, sir.",emo:'neutral'},
+    {text:"Task completed with 99.8% efficiency. Well done!",emo:'happy'},
+    {text:"ALERT — Anomaly detected. Initiating countermeasures!",emo:'angry'},
+    {text:"I'm sorry, I couldn't complete that request.",emo:'sad'},
+    {text:"INCREDIBLE! New benchmark achieved! Full power mode!",emo:'excited'},
+  ];
+  for(const d of demos){
+    applyEmotion(d.emo);
+    showBubble(d.text,true);
+    assistantSpeaking(true);
+    await new Promise(r=>setTimeout(r,3500));
+    assistantSpeaking(false);
+    await new Promise(r=>setTimeout(r,500));
+  }
+}
+
+// ── KEYBOARD SHORTCUTS ───────────────────────────────────
+document.addEventListener('keydown',ev=>{
+  if(ev.key==='1')applyEmotion('neutral');
+  if(ev.key==='2')applyEmotion('happy');
+  if(ev.key==='3')applyEmotion('excited');
+  if(ev.key==='4')applyEmotion('sad');
+  if(ev.key==='5')applyEmotion('angry');
+  if(ev.key==='Escape')hideBubble();
+  if(ev.key==='d'||ev.key==='D')demoSpeak();
+});
+
+// ── BOOT LOG ─────────────────────────────────────────────
+[
+  [100,'Canvas renderer active'],
+  [250,'HUD initialized'],
+  [420,'Emotion engine ready'],
+  [600,'pywebview bridge listening'],
+  [850,'Say "Vasu" to wake me up'],
+].forEach(([t,msg])=>setTimeout(()=>addLog(msg),t));
+</script>
+</body>
+</html>

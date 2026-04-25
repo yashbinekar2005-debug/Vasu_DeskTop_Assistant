@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --c: #00f5ff;
+  --cg: rgba(0,245,255,0.15);
+  --bg: #030810;
+  --panel: rgba(3,8,16,0.92);
+  --border: rgba(0,245,255,0.2);
+  --glow: 0 0 14px rgba(0,245,255,0.6);
+  --fd: 'Orbitron', monospace;
+  --fm: 'Share Tech Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg);
+  font-family: var(--fm);
+  color: var(--c);
+  cursor: crosshair;
+}
+
+/* ── PARTICLE BG ── */
+#bg-canvas {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+
+/* ── AVATAR CANVAS ── */
+#avatar-canvas {
+  position: fixed;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── SCANLINES ── */
+.scanlines {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none;
+  background: repeating-linear-gradient(0deg,
+    transparent 0, transparent 3px,
+    rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px);
+}
+
+/* ── HUD SHELL ── */
+#hud {
+  position: fixed; inset: 0; z-index: 5;
+  display: grid;
+  grid-template-rows: 50px 1fr 64px;
+  grid-template-columns: 180px 1fr 180px;
+  pointer-events: none;
+}
+
+/* ── TOPBAR ── */
+#topbar {
+  grid-column: 1/-1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 18px;
+  background: linear-gradient(180deg, rgba(3,8,16,.98) 0%, transparent 100%);
+  border-bottom: 1px solid var(--border);
+  pointer-events: all;
+}
+.logo {
+  font-family: var(--fd); font-size: 15px; font-weight: 900;
+  letter-spacing: .45em;
+  text-shadow: var(--glow);
+  animation: pulse 3s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
+.topbar-mid { display: flex; gap: 18px; font-size: 10px; color: rgba(0,245,255,.45); letter-spacing:.1em; align-items:center; }
+.dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--c); box-shadow:var(--glow); margin-right:5px; animation:blink 1.4s step-start infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.05} }
+.mode-lbl { font-family:var(--fd); font-size:9px; letter-spacing:.18em; opacity:.55; }
+
+/* ── SIDE PANELS ── */
+.side {
+  grid-row: 2;
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 12px 9px;
+  pointer-events: all;
+}
+#lp { grid-column: 1; }
+#rp { grid-column: 3; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--c);
+  padding: 9px 11px;
+  backdrop-filter: blur(8px);
+  position: relative; overflow: hidden;
+  transition: border-color .4s;
+}
+.card::after {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, var(--c), transparent);
+  opacity: .25;
+}
+.ct {
+  font-family: var(--fd); font-size: 7px; letter-spacing: .24em;
+  opacity: .4; margin-bottom: 7px; transition: color .4s;
+}
+
+/* bar */
+.br { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+.bl { width:24px; font-size:8px; opacity:.4; }
+.bt { flex:1; height:3px; background:rgba(255,255,255,.05); border-radius:2px; overflow:hidden; }
+.bf { height:100%; border-radius:2px; background:var(--c); box-shadow:0 0 6px var(--c); transition: width .6s cubic-bezier(.4,0,.2,1), background .4s; }
+.bv { font-size:8px; opacity:.4; min-width:22px; text-align:right; }
+
+/* waveform */
+#wave { width:100%; height:36px; display:block; margin-top:2px; }
+
+/* emotion card */
+.eface { text-align:center; font-size:38px; padding:4px 0;
+  filter: drop-shadow(0 0 12px var(--c));
+  animation: bob 3s ease-in-out infinite; transition: filter .4s; }
+@keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+.ename { font-family:var(--fd); font-size:8px; letter-spacing:.22em; text-align:center; margin-top:5px; transition:color .4s; }
+.esub { font-size:9px; text-align:center; margin-top:4px; color:rgba(255,255,255,.28); line-height:1.5; }
+
+/* log */
+#log { font-size:9px; line-height:1.85; color:rgba(255,255,255,.32); overflow:hidden; max-height:96px; }
+.ll::before { content:'› '; color:var(--c); opacity:.5; }
+
+/* ctx */
+.crow { display:flex; justify-content:space-between; margin-bottom:5px; font-size:9px; opacity:.45; }
+
+/* ── BUBBLE ── */
+#bubble {
+  position:fixed; bottom:78px; left:50%; transform:translateX(-50%);
+  z-index:10; max-width:440px; min-width:160px;
+  background:rgba(3,8,16,.94);
+  border:1px solid var(--c);
+  padding:12px 16px; font-size:12px; line-height:1.65;
+  color:rgba(255,255,255,.85); backdrop-filter:blur(14px);
+  box-shadow: var(--glow);
+  opacity:0; pointer-events:none;
+  transition: opacity .28s, border-color .4s, box-shadow .4s;
+}
+#bubble.show { opacity:1; }
+#bubble::after {
+  content:''; position:absolute; bottom:-6px; left:50%;
+  transform:translateX(-50%) rotate(45deg);
+  width:10px; height:10px; background:var(--c);
+  opacity:.6; clip-path:polygon(0 100%,0 0,100% 100%);
+  transition: background .4s;
+}
+.cur { display:inline-block; width:2px; height:12px; background:var(--c); vertical-align:middle; margin-left:2px; animation:blink .7s step-start infinite; transition:background .4s; }
+
+/* ── BOTTOM BAR ── */
+#botbar {
+  grid-column:1/-1;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:0 18px;
+  background:linear-gradient(0deg, rgba(3,8,16,.98) 0%, transparent 100%);
+  border-top:1px solid var(--border);
+  pointer-events:all;
+}
+.ebtn {
+  width:28px; height:28px; border-radius:50%;
+  border:1px solid rgba(255,255,255,.12); background:transparent;
+  font-size:14px; cursor:pointer; transition:all .18s;
+  display:flex; align-items:center; justify-content:center;
+}
+.ebtn:hover { transform:scale(1.25); border-color:rgba(255,255,255,.4); }
+.ebtn.on { border-color:var(--c); box-shadow:0 0 10px var(--c); }
+.sep { width:1px; height:26px; background:var(--border); margin:0 3px; }
+.btn {
+  font-family:var(--fd); font-size:8px; letter-spacing:.13em;
+  padding:6px 13px; background:transparent;
+  border:1px solid var(--c); color:var(--c); cursor:pointer;
+  transition:all .18s; position:relative; overflow:hidden;
+}
+.btn::before { content:''; position:absolute; inset:0; background:var(--c); opacity:0; transition:opacity .18s; }
+.btn:hover::before { opacity:.07; }
+.btn:active::before { opacity:.18; }
+.btn.on { background:rgba(0,245,255,.1); box-shadow:var(--glow); }
+
+/* ticker */
+#ticker { font-size:9px; color:rgba(0,245,255,.28); letter-spacing:.06em; overflow:hidden; max-width:240px; white-space:nowrap; }
+#ticker span { display:inline-block; animation:tick 22s linear infinite; }
+@keyframes tick { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+
+/* corners */
+.corner { position:fixed; width:34px; height:34px; pointer-events:none; z-index:6; opacity:.35; }
+.corner svg { width:100%; height:100%; }
+.tl { top:54px; left:5px; }
+.tr { top:54px; right:5px; transform:scaleX(-1); }
+.bl { bottom:68px; left:5px; transform:scaleY(-1); }
+.br { bottom:68px; right:5px; transform:scale(-1,-1); }
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<canvas id="avatar-canvas" width="340" height="400"></canvas>
+<div class="scanlines"></div>
+
+<!-- Corners -->
+<div class="corner tl"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+<div class="corner tr"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+<div class="corner bl"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+<div class="corner br"><svg viewBox="0 0 34 34"><path d="M1,33 L1,1 L33,1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+
+<!-- Speech Bubble -->
+<div id="bubble"><span id="btxt"></span><span class="cur" id="bcur" style="display:none"></span></div>
+
+<!-- HUD -->
+<div id="hud">
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="logo">JARVIS</div>
+    <div class="topbar-mid">
+      <span><span class="dot"></span><span id="stat">ONLINE</span></span>
+      <span id="clk">00:00:00</span>
+      <span id="ds"></span>
+    </div>
+    <div class="mode-lbl" id="mlbl">IDLE MODE</div>
+  </div>
+
+  <!-- LEFT -->
+  <div class="side" id="lp">
+    <div class="card">
+      <div class="ct">SYSTEM METRICS</div>
+      <div class="br"><span class="bl">CPU</span><div class="bt"><div class="bf" id="b-cpu" style="width:42%"></div></div><span class="bv" id="v-cpu">42%</span></div>
+      <div class="br"><span class="bl">RAM</span><div class="bt"><div class="bf" id="b-ram" style="width:67%"></div></div><span class="bv" id="v-ram">67%</span></div>
+      <div class="br"><span class="bl">NET</span><div class="bt"><div class="bf" id="b-net" style="width:28%"></div></div><span class="bv" id="v-net">28%</span></div>
+    </div>
+    <div class="card">
+      <div class="ct">VOICE SIGNAL</div>
+      <canvas id="wave"></canvas>
+    </div>
+    <div class="card">
+      <div class="ct">AFFECT STATE</div>
+      <div class="eface" id="eface">😐</div>
+      <div class="ename" id="ename">NEUTRAL</div>
+      <div class="esub" id="esub">Standard mode.<br>Awaiting input.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="side" id="rp">
+    <div class="card">
+      <div class="ct">RESPONSE METRICS</div>
+      <div class="br"><span class="bl">CONF</span><div class="bt"><div class="bf" id="b-conf" style="width:88%"></div></div><span class="bv" id="v-conf">88%</span></div>
+      <div class="br"><span class="bl">TONE</span><div class="bt"><div class="bf" id="b-tone" style="width:72%"></div></div><span class="bv" id="v-tone">72%</span></div>
+      <div class="br"><span class="bl">SYNC</span><div class="bt"><div class="bf" id="b-sync" style="width:95%"></div></div><span class="bv" id="v-sync">95%</span></div>
+    </div>
+    <div class="card" style="flex:1;overflow:hidden;">
+      <div class="ct">SESSION LOG</div>
+      <div id="log">
+        <div class="ll">System initialized</div>
+        <div class="ll">Canvas renderer ready</div>
+        <div class="ll">Awaiting commands</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">CONTEXT WINDOW</div>
+      <div class="crow"><span>TOKENS</span><span id="ctxv">0 / 128k</span></div>
+      <div class="bt" style="height:5px;"><div class="bf" id="b-ctx" style="width:1%"></div></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div id="botbar">
+    <button class="ebtn on" data-e="neutral">😐</button>
+    <button class="ebtn" data-e="happy">😊</button>
+    <button class="ebtn" data-e="excited">🤩</button>
+    <button class="ebtn" data-e="sad">😢</button>
+    <button class="ebtn" data-e="angry">😠</button>
+    <div class="sep"></div>
+    <button class="btn" id="btalk" onclick="window.startTalking()">▶ SPEAK</button>
+    <button class="btn" id="bstop" onclick="window.stopTalking()">■ STOP</button>
+    <button class="btn" onclick="window.demoSpeak()">◈ DEMO</button>
+    <div class="sep"></div>
+    <div id="ticker"><span>JARVIS NEURAL CORE v4 · CANVAS RENDERER ACTIVE · AFFECT ENGINE ONLINE · VOICE SYNTH READY · ALL SYSTEMS NOMINAL ·&nbsp;&nbsp;&nbsp;</span></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// JARVIS — Pure Canvas2D Avatar + HUD (no CDN deps)
+// Instant load, 60fps, full emotion system
+// ═══════════════════════════════════════════════════
+
+// ── EMOTION CONFIG ──────────────────────────────────
+const EMO = {
+  neutral: { icon:'😐', name:'NEUTRAL', desc:'Standard mode.\nAwaiting input.',
+    color:'#00f5ff', r:0,g:245,b:255, mspd:100, mamp:.5,
+    eyeH:.55, browY:0, mouthCurve:0 },
+  happy:   { icon:'😊', name:'HAPPY',   desc:'Positive affect.\nHigh engagement.',
+    color:'#00ff99', r:0,g:255,b:153, mspd:75, mamp:.75,
+    eyeH:.38, browY:.5, mouthCurve:1 },
+  excited: { icon:'🤩', name:'EXCITED', desc:'Peak enthusiasm.\nFull power mode.',
+    color:'#ffb300', r:255,g:179,b:0, mspd:55, mamp:.95,
+    eyeH:.6,  browY:.8, mouthCurve:.7 },
+  sad:     { icon:'😢', name:'SAD',     desc:'Low energy state.\nEmpathy active.',
+    color:'#5e9fff', r:94,g:159,b:255, mspd:160, mamp:.22,
+    eyeH:.45, browY:-.6, mouthCurve:-1 },
+  angry:   { icon:'😠', name:'ANGRY',   desc:'Alert state.\nStress response.',
+    color:'#ff3b5c', r:255,g:59,b:92, mspd:45, mamp:1,
+    eyeH:.58, browY:-.9, mouthCurve:-.5 }
+};
+
+let emotion = 'neutral';
+let isTalking = false;
+let mouseX = 0, mouseY = 0;
+let twTimer = null;
+
+// ── APPLY EMOTION ───────────────────────────────────
+function applyEmotion(name) {
+  const e = EMO[name] || EMO.neutral;
+  emotion = name;
+  const root = document.documentElement.style;
+  root.setProperty('--c', e.color);
+  root.setProperty('--cg', `rgba(${e.r},${e.g},${e.b},0.15)`);
+  root.setProperty('--border', `rgba(${e.r},${e.g},${e.b},0.2)`);
+  root.setProperty('--glow', `0 0 14px rgba(${e.r},${e.g},${e.b},0.6)`);
+  document.getElementById('eface').textContent = e.icon;
+  document.getElementById('ename').textContent = e.name;
+  document.getElementById('esub').textContent = e.desc;
+  document.querySelectorAll('.ebtn').forEach(b => b.classList.toggle('on', b.dataset.e === name));
+  addLog(`Affect → ${e.name}`);
+}
+
+// ── CANVAS AVATAR ───────────────────────────────────
+const AC = document.getElementById('avatar-canvas');
+const ax = AC.getContext('2d');
+
+// Smooth interpolation state
+const av = { mouthOpen:0, eyeH:.55, browY:0, mouthCurve:0,
+              lookX:0, lookY:0, breathe:0, blink:0, blinkTimer:0 };
+
+let lastBlink = 0;
+
+function drawAvatar(ts) {
+  const W = AC.width, H = AC.height;
+  const e = EMO[emotion] || EMO.neutral;
+  const cx = W/2, cy = H/2;
+
+  // Smooth interpolation
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const sp = 0.08;
+
+  av.eyeH      = lerp(av.eyeH,      e.eyeH,      sp);
+  av.browY     = lerp(av.browY,      e.browY,      sp);
+  av.mouthCurve= lerp(av.mouthCurve, e.mouthCurve, sp);
+
+  // Mouth open (lip sync)
+  const targetMouth = isTalking ? ((Math.sin(ts/e.mspd)+1)/2 * e.mamp) : 0;
+  av.mouthOpen = lerp(av.mouthOpen, targetMouth, 0.18);
+
+  // Mouse parallax look
+  const rect = AC.getBoundingClientRect();
+  const dx = (mouseX - (rect.left + W/2)) / window.innerWidth;
+  const dy = (mouseY - (rect.top  + H/2)) / window.innerHeight;
+  av.lookX = lerp(av.lookX, dx * 10, 0.06);
+  av.lookY = lerp(av.lookY, dy *  8, 0.06);
+
+  // Breathing
+  av.breathe = Math.sin(ts/2000) * 4;
+
+  // Auto blink
+  av.blinkTimer += 16;
+  if (av.blinkTimer > 4000 + Math.random()*2000) {
+    av.blinkTimer = 0; lastBlink = ts;
+  }
+  const blinkAmt = (ts - lastBlink < 120) ? Math.sin((ts-lastBlink)/120*Math.PI) : 0;
+
+  // Clear
+  ax.clearRect(0, 0, W, H);
+
+  const col = `rgb(${e.r},${e.g},${e.b})`;
+  const colA = (a) => `rgba(${e.r},${e.g},${e.b},${a})`;
+
+  // ── OUTER GLOW RING ──
+  const ringR = 120 + av.breathe * .3;
+  const grad = ax.createRadialGradient(cx,cy+30,ringR*.7,cx,cy+30,ringR*1.3);
+  grad.addColorStop(0, colA(.12));
+  grad.addColorStop(1, colA(0));
+  ax.beginPath();
+  ax.arc(cx, cy+30, ringR*1.3, 0, Math.PI*2);
+  ax.fillStyle = grad;
+  ax.fill();
+
+  // ── NECK ──
+  ax.beginPath();
+  ax.rect(cx-18, cy+98, 36, 36);
+  ax.fillStyle = '#1a1a2e';
+  ax.fill();
+
+  // ── HEAD ──
+  ax.save();
+  ax.translate(cx, cy + av.breathe);
+  // shadow
+  ax.shadowColor = col;
+  ax.shadowBlur = 22;
+  ax.beginPath();
+  ax.ellipse(0, 10, 88, 105, 0, 0, Math.PI*2);
+  ax.fillStyle = '#0d0d1f';
+  ax.fill();
+  ax.shadowBlur = 0;
+
+  // head border
+  ax.beginPath();
+  ax.ellipse(0, 10, 88, 105, 0, 0, Math.PI*2);
+  ax.strokeStyle = colA(.5);
+  ax.lineWidth = 1.5;
+  ax.stroke();
+
+  // face highlight
+  const hg = ax.createRadialGradient(-20,-30,10,0,0,90);
+  hg.addColorStop(0, colA(.08));
+  hg.addColorStop(1, 'transparent');
+  ax.beginPath();
+  ax.ellipse(0, 10, 88, 105, 0, 0, Math.PI*2);
+  ax.fillStyle = hg;
+  ax.fill();
+
+  // ── HAIR / VISOR ──
+  ax.beginPath();
+  ax.ellipse(0, -72, 88, 42, 0, Math.PI, Math.PI*2);
+  ax.fillStyle = colA(.18);
+  ax.fill();
+  ax.beginPath();
+  ax.ellipse(0, -72, 88, 42, 0, Math.PI, Math.PI*2);
+  ax.strokeStyle = colA(.3);
+  ax.lineWidth = 1;
+  ax.stroke();
+
+  // ── CIRCUIT LINES ON FACE ──
+  ax.strokeStyle = colA(.08); ax.lineWidth = 1;
+  [[-60,-20],[-60,20],[60,-20],[60,20]].forEach(([sx,sy]) => {
+    ax.beginPath(); ax.moveTo(sx, sy);
+    ax.lineTo(sx/2, sy/3); ax.stroke();
+  });
+
+  // ── EYES ──
+  const eyeOff = 28;
+  [[-eyeOff, 0],[eyeOff, 0]].forEach(([ex], i) => {
+    const ey = -5;
+    const pupilX = ex + av.lookX * .6;
+    const pupilY = ey + av.lookY * .4;
+
+    // eye socket
+    ax.beginPath();
+    ax.ellipse(ex, ey, 22, 14, 0, 0, Math.PI*2);
+    ax.fillStyle = '#07071a';
+    ax.fill();
+    ax.strokeStyle = colA(.35);
+    ax.lineWidth = 1;
+    ax.stroke();
+
+    // iris
+    ax.beginPath();
+    ax.ellipse(pupilX, pupilY, 10, 10, 0, 0, Math.PI*2);
+    ax.fillStyle = colA(.7);
+    ax.fill();
+
+    // pupil
+    ax.beginPath();
+    ax.ellipse(pupilX, pupilY, 5, 5, 0, 0, Math.PI*2);
+    ax.fillStyle = '#000';
+    ax.fill();
+
+    // pupil shine
+    ax.beginPath();
+    ax.ellipse(pupilX-2, pupilY-2, 2, 2, 0, 0, Math.PI*2);
+    ax.fillStyle = 'rgba(255,255,255,.6)';
+    ax.fill();
+
+    // eyelid (blink + emotion)
+    const lidClose = Math.max(blinkAmt, 1 - av.eyeH);
+    if (lidClose > 0) {
+      ax.beginPath();
+      ax.ellipse(ex, ey, 22, 14*lidClose, 0, 0, Math.PI*2);
+      ax.fillStyle = '#0d0d1f';
+      ax.fill();
+    }
+
+    // ── EYEBROW ──
+    const bx = ex, by = ey - 20 - av.browY * 6;
+    ax.beginPath();
+    ax.moveTo(bx-14, by + (i===0 ? av.browY*4 : -av.browY*4));
+    ax.quadraticCurveTo(bx, by - 3, bx+14, by + (i===0 ? -av.browY*4 : av.browY*4));
+    ax.strokeStyle = colA(.7);
+    ax.lineWidth = 2.5;
+    ax.lineCap = 'round';
+    ax.stroke();
+  });
+
+  // ── NOSE (subtle) ──
+  ax.beginPath();
+  ax.moveTo(-5, 18); ax.lineTo(0, 28); ax.lineTo(5, 18);
+  ax.strokeStyle = colA(.25); ax.lineWidth = 1.5; ax.stroke();
+
+  // ── MOUTH ──
+  const mw = 30, my = 48;
+  const openH = av.mouthOpen * 16;
+  const curve = av.mouthCurve * 10;
+
+  if (openH > 0.5) {
+    // open mouth
+    ax.beginPath();
+    ax.moveTo(-mw, my - openH/2);
+    ax.quadraticCurveTo(0, my - openH/2 + curve, mw, my - openH/2);
+    ax.quadraticCurveTo(mw+3, my, mw, my + openH/2);
+    ax.quadraticCurveTo(0, my + openH/2 + curve*.5, -mw, my + openH/2);
+    ax.quadraticCurveTo(-mw-3, my, -mw, my - openH/2);
+    ax.fillStyle = '#03040c';
+    ax.fill();
+    ax.strokeStyle = colA(.5);
+    ax.lineWidth = 1.5; ax.stroke();
+    // teeth hint
+    ax.beginPath();
+    ax.rect(-mw+4, my-openH/2+2, (mw-4)*2, openH*.3);
+    ax.fillStyle = 'rgba(255,255,255,.15)';
+    ax.fill();
+  } else {
+    // closed expression
+    ax.beginPath();
+    ax.moveTo(-mw, my);
+    ax.quadraticCurveTo(0, my + curve, mw, my);
+    ax.strokeStyle = colA(.55);
+    ax.lineWidth = 2; ax.lineCap = 'round'; ax.stroke();
+  }
+
+  // ── EAR DETAILS ──
+  [-90, 90].forEach(ex2 => {
+    ax.beginPath();
+    ax.arc(ex2, 10, 8, 0, Math.PI*2);
+    ax.fillStyle = '#0d0d1f';
+    ax.fill();
+    ax.strokeStyle = colA(.3); ax.lineWidth = 1; ax.stroke();
+    // ear inner
+    ax.beginPath();
+    ax.arc(ex2, 10, 4, 0, Math.PI*2);
+    ax.strokeStyle = colA(.5); ax.lineWidth = 1; ax.stroke();
+  });
+
+  // ── HUD EYE MARKINGS ──
+  ax.strokeStyle = colA(.15); ax.lineWidth = 1;
+  ax.beginPath(); ax.moveTo(-50,-85); ax.lineTo(-50,-75); ax.lineTo(-40,-70); ax.stroke();
+  ax.beginPath(); ax.moveTo( 50,-85); ax.lineTo( 50,-75); ax.lineTo( 40,-70); ax.stroke();
+
+  ax.restore();
+
+  // ── SHOULDER BODY ──
+  ax.save();
+  ax.translate(cx, cy + av.breathe);
+  // body
+  ax.beginPath();
+  ax.moveTo(-100, 140);
+  ax.quadraticCurveTo(-110, 115, -90, 105);
+  ax.lineTo(90, 105);
+  ax.quadraticCurveTo(110, 115, 100, 140);
+  ax.fillStyle = '#0a0a1e';
+  ax.fill();
+  ax.strokeStyle = colA(.3); ax.lineWidth = 1.5; ax.stroke();
+  // chest accent
+  ax.beginPath();
+  ax.moveTo(-30, 110); ax.lineTo(0, 118); ax.lineTo(30, 110);
+  ax.strokeStyle = colA(.4); ax.lineWidth = 1; ax.stroke();
+  // chest glow dot
+  const cg = ax.createRadialGradient(0,122,0, 0,122,14);
+  cg.addColorStop(0, colA(.6)); cg.addColorStop(1, colA(0));
+  ax.beginPath(); ax.arc(0, 122, 14, 0, Math.PI*2);
+  ax.fillStyle = cg; ax.fill();
+  ax.restore();
+
+  requestAnimationFrame(drawAvatar);
+}
+requestAnimationFrame(drawAvatar);
+
+// ── PARTICLE BACKGROUND ─────────────────────────────
+const BC = document.getElementById('bg-canvas');
+const bx = BC.getContext('2d');
+BC.width = window.innerWidth; BC.height = window.innerHeight;
+
+const particles = Array.from({length:55}, () => ({
+  x: Math.random() * BC.width,
+  y: Math.random() * BC.height,
+  r: Math.random() * 1.2 + .3,
+  vx: (Math.random()-.5)*.3,
+  vy: (Math.random()-.5)*.3,
+  a: Math.random()
+}));
+
+function drawBG() {
+  bx.clearRect(0, 0, BC.width, BC.height);
+  const e = EMO[emotion] || EMO.neutral;
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = BC.width;
+    if (p.x > BC.width) p.x = 0;
+    if (p.y < 0) p.y = BC.height;
+    if (p.y > BC.height) p.y = 0;
+    bx.beginPath();
+    bx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    bx.fillStyle = `rgba(${e.r},${e.g},${e.b},${p.a * .35})`;
+    bx.fill();
+  });
+  requestAnimationFrame(drawBG);
+}
+drawBG();
+
+window.addEventListener('resize', () => {
+  BC.width = window.innerWidth; BC.height = window.innerHeight;
+});
+
+// ── WAVEFORM ───────────────────────────────────────
+const WC = document.getElementById('wave');
+const wx = WC.getContext('2d');
+
+function drawWave(ts) {
+  const W = WC.offsetWidth || 158, H = 36;
+  WC.width = W * devicePixelRatio; WC.height = H * devicePixelRatio;
+  wx.scale(devicePixelRatio, devicePixelRatio);
+  wx.clearRect(0, 0, W, H);
+  const e = EMO[emotion] || EMO.neutral;
+  const col = `rgb(${e.r},${e.g},${e.b})`;
+  wx.strokeStyle = col;
+  wx.lineWidth = 1.5;
+  wx.shadowColor = col; wx.shadowBlur = 5;
+  wx.beginPath();
+  const amp = isTalking ? 11 : 2;
+  for (let i = 0; i <= 56; i++) {
+    const x = (i/56)*W;
+    const noise = isTalking
+      ? Math.sin(i*.4 + ts/100) * amp + Math.sin(i*.85 + ts/65) * amp*.5 * Math.random()
+      : Math.sin(i*.3 + ts/1200) * amp;
+    i===0 ? wx.moveTo(x, H/2+noise) : wx.lineTo(x, H/2+noise);
+  }
+  wx.stroke();
+  requestAnimationFrame(drawWave);
+}
+requestAnimationFrame(drawWave);
+
+// ── MOUSE TRACKING ──────────────────────────────────
+document.addEventListener('mousemove', ev => { mouseX = ev.clientX; mouseY = ev.clientY; });
+
+// ── CLOCK ───────────────────────────────────────────
+function tick() {
+  const n = new Date();
+  const p = v => String(v).padStart(2,'0');
+  document.getElementById('clk').textContent = `${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}`;
+  document.getElementById('ds').textContent = n.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+setInterval(tick, 1000); tick();
+
+// ── METRICS SIM ─────────────────────────────────────
+function jitter(base, range) { return Math.min(99, Math.max(1, base+(Math.random()-.5)*range)); }
+function setBar(id, v) {
+  document.getElementById('b-'+id).style.width = v.toFixed(0)+'%';
+  const vEl = document.getElementById('v-'+id);
+  if (vEl) vEl.textContent = v.toFixed(0)+'%';
+}
+setInterval(() => {
+  setBar('cpu', jitter(isTalking?68:42, 12));
+  setBar('ram', jitter(67, 8));
+  setBar('net', jitter(isTalking?52:28, 14));
+  setBar('conf', jitter(88, 5));
+  setBar('tone', jitter(72, 10));
+  setBar('sync', jitter(95, 3));
+  const ctxPct = (Date.now()/1000 % 120)/120*100;
+  document.getElementById('b-ctx').style.width = ctxPct.toFixed(1)+'%';
+  document.getElementById('ctxv').textContent = Math.round(ctxPct*1280)+' / 128k';
+}, 1200);
+
+// ── LOG ─────────────────────────────────────────────
+function addLog(msg) {
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = 'll'; d.textContent = msg;
+  log.appendChild(d);
+  while (log.children.length > 7) log.removeChild(log.firstChild);
+}
+
+function setMode(t) {
+  document.getElementById('mlbl').textContent = t+' MODE';
+  document.getElementById('stat').textContent = t==='IDLE'?'ONLINE':t;
+}
+
+// ── BUBBLE ──────────────────────────────────────────
+function showBubble(text, tw=false) {
+  const bub = document.getElementById('bubble');
+  const el = document.getElementById('btxt');
+  const cur = document.getElementById('bcur');
+  clearTimeout(twTimer);
+  el.textContent = '';
+  bub.classList.add('show');
+  if (tw) {
+    cur.style.display='inline-block'; let i=0;
+    const go=()=>{ if(i<text.length){el.textContent+=text[i++]; twTimer=setTimeout(go,26);} else cur.style.display='none'; };
+    go();
+  } else { el.textContent=text; cur.style.display='none'; }
+}
+function hideBubble() {
+  document.getElementById('bubble').classList.remove('show');
+  clearTimeout(twTimer);
+}
+
+// ── PUBLIC API ───────────────────────────────────────
+window.startTalking = () => {
+  isTalking = true;
+  document.getElementById('btalk').classList.add('on');
+  setMode('SPEAKING'); addLog('Speech started');
+};
+
+window.stopTalking = () => {
+  isTalking = false;
+  document.getElementById('btalk').classList.remove('on');
+  setMode('IDLE'); addLog('Speech stopped');
+};
+
+window.setEmotion = applyEmotion;
+
+window.speak = (text, emo) => {
+  if (emo) applyEmotion(emo);
+  showBubble(text, true);
+  window.startTalking();
+};
+
+window.demoSpeak = async () => {
+  const demos = [
+    { text:"All systems are online. Ready for your command, sir.", emo:'neutral' },
+    { text:"Mission accomplished! Task completed with 99.8% efficiency.", emo:'happy' },
+    { text:"ALERT — Anomaly detected. Initiating countermeasures immediately!", emo:'angry' },
+    { text:"I'm sorry, I couldn't complete that request as expected.", emo:'sad' },
+    { text:"INCREDIBLE! New benchmark achieved! Peak performance unlocked!", emo:'excited' },
+  ];
+  for (const d of demos) {
+    applyEmotion(d.emo);
+    showBubble(d.text, true);
+    window.startTalking();
+    await new Promise(r=>setTimeout(r, 3400));
+    window.stopTalking();
+    hideBubble();
+    await new Promise(r=>setTimeout(r, 500));
+  }
+};
+
+// ── EMOTION BUTTONS ──────────────────────────────────
+document.querySelectorAll('.ebtn').forEach(b => {
+  b.addEventListener('click', () => applyEmotion(b.dataset.e));
+});
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key===' ') { isTalking?window.stopTalking():window.startTalking(); e.preventDefault(); }
+  if (e.key==='1') applyEmotion('neutral');
+  if (e.key==='2') applyEmotion('happy');
+  if (e.key==='3') applyEmotion('excited');
+  if (e.key==='4') applyEmotion('sad');
+  if (e.key==='5') applyEmotion('angry');
+  if (e.key==='Escape') hideBubble();
+  if (e.key==='d'||e.key==='D') window.demoSpeak();
+});
+
+// ── BOOT LOG ─────────────────────────────────────────
+setTimeout(()=>addLog('Canvas renderer active'), 100);
+setTimeout(()=>addLog('HUD initialized'), 250);
+setTimeout(()=>addLog('Emotion engine ready'), 400);
+setTimeout(()=>addLog('All systems nominal'), 600);
+</script>
+</body>
+</html>
