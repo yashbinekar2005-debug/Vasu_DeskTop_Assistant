@@ -28,25 +28,9 @@ This project demonstrates the use of Python for automation, voice recognition, a
 - **JavaScript** (optional UI interaction)
 - **Operating System Automation**
 
-## 📁 Project Structure
-Vasu 1.0/
-│
-├── main.py
-├── Vasu_UI.html
-├── index.html
-├── Main_file(version)/
-│ └── main1.py
-│
-├── rough_code/
-│ └── Vasu_UI/
-│ ├── Vasu_UI.html
-│ ├── Vasu_UI(old).html
-│ └── main3.py
-│
-└── README.md
 ---
 
----
+
 
 ## ⚙️ Installation
 
