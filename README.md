@@ -1,4 +1,4 @@
-# 🖥️ Vasu Desktop Assistant (JARVIS 1.0)
+# 🖥️ Vasu Desktop Assistant (VASU 1.0)
 
 Vasu Desktop Assistant is a Python-based voice-enabled desktop assistant designed to automate daily computer tasks using voice commands.  
 It can perform operations like opening applications, searching the web, telling time, and interacting with the user through a simple interface.
